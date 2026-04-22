@@ -16,7 +16,7 @@ WaterCurtainWidget::WaterCurtainWidget(QWidget* parent)
 {
     setMinimumSize(800, 600);
     setAttribute(Qt::WA_OpaquePaintEvent);
-    setFocusPolicy(Qt::StrongFocus);  // 接收键盘事件
+    setFocusPolicy(Qt::StrongFocus);
 
     m_updateTimer.setInterval(16);
     connect(&m_updateTimer, &QTimer::timeout, this, &WaterCurtainWidget::updateParticles);
@@ -49,22 +49,27 @@ void WaterCurtainWidget::setParticleCount(int count)
 
 void WaterCurtainWidget::startFalling()
 {
+    // 重置所有粒子到顶部，重新开始下落
+    for (int i = 0; i < m_particles.size(); ++i) {
+        m_particles[i].y = 4.0f;
+        m_particles[i].vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
+    }
+
     m_isFalling = true;
     m_lastTime = QElapsedTimer().nsecsElapsed() / 1e9f;
+    qDebug() << "Start falling! Particles reset to top";
 }
 
 void WaterCurtainWidget::keyPressEvent(QKeyEvent* event)
 {
     if (event->key() == Qt::Key_Space) {
         startFalling();
-        qDebug() << "Start falling!";
     }
 }
 
 bool WaterCurtainWidget::shouldSpawnAt(float x, float z) const
 {
     if (m_curtainImage.isNull()) {
-        // 默认心形
         float heartX = x / 2.5f;
         float heartZ = z / 2.0f;
         float heartFormula = pow(heartX * heartX + heartZ * heartZ - 1, 3) - heartX * heartX * heartZ * heartZ * heartZ;
@@ -89,7 +94,6 @@ void WaterCurtainWidget::initParticles()
 {
     m_particles.clear();
 
-    // 采样网格，确保形状清晰
     float xStart = -5.0f;
     float xEnd = 5.0f;
     float zStart = -4.0f;
@@ -110,8 +114,8 @@ void WaterCurtainWidget::initParticles()
                 Particle p;
                 p.x = x;
                 p.z = z;
-                p.y = 0.0f;  // 初始在同一平面，便于观察形状
-                p.vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
+                p.y = 0.0f;
+                p.vy = 0.0f;
                 p.active = true;
                 m_particles.append(p);
             }
@@ -125,7 +129,6 @@ void WaterCurtainWidget::initParticles()
 void WaterCurtainWidget::updateParticles()
 {
     if (!m_isFalling) {
-        // 未开始下落，不更新物理
         return;
     }
 
@@ -149,6 +152,12 @@ void WaterCurtainWidget::updateParticles()
             p.y = 4.0f;
             p.vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
         }
+
+        // 超出顶部重置
+        if (p.y > 5.0f) {
+            p.y = 4.0f;
+            p.vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
+        }
     }
 
     update();
@@ -159,38 +168,46 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
 
-    // 黑色背景
     painter.fillRect(rect(), QColor(0, 0, 0));
 
     int w = width();
     int h = height();
 
-    // 正交投影 - 直接显示X-Z平面，像看图片一样
-    float marginX = w * 0.1f;
-    float marginY = h * 0.1f;
+    // 增加边距，让显示更小
+    float marginX = w * 0.2f;
+    float marginY = h * 0.2f;
     float drawW = w - 2 * marginX;
     float drawH = h - 2 * marginY;
 
-    // X范围 -5 到 5，Z范围 -4 到 4
     float scaleX = drawW / 10.0f;
     float scaleZ = drawH / 8.0f;
 
-    // 先绘制网格线（帮助定位）
-    painter.setPen(QColor(40, 40, 60));
-    for (int i = -5; i <= 5; i++) {
-        float screenX = marginX + (i + 5) * scaleX;
-        painter.drawLine(screenX, marginY, screenX, marginY + drawH);
-    }
-    for (int i = -4; i <= 4; i++) {
-        float screenY = marginY + (4 - i) * scaleZ;
-        painter.drawLine(marginX, screenY, marginX + drawW, screenY);
-    }
+    // 网格线（可选，注释掉以保持清晰）
+    // painter.setPen(QColor(40, 40, 60));
+    // for (int i = -5; i <= 5; i++) {
+    //     float screenX = marginX + (i + 5) * scaleX;
+    //     painter.drawLine(screenX, marginY, screenX, marginY + drawH);
+    // }
+    // for (int i = -4; i <= 4; i++) {
+    //     float screenY = marginY + (4 - i) * scaleZ;
+    //     painter.drawLine(marginX, screenY, marginX + drawW, screenY);
+    // }
 
-    // 绘制所有粒子 - 显示BMP形状
+    // 绘制所有粒子
     for (const auto& p : m_particles) {
-        // 屏幕坐标（正交投影）
         float screenX = marginX + (p.x + 5.0f) * scaleX;
-        float screenY = marginY + (4.0f - p.z) * scaleZ;
+
+        float screenY;
+        if (m_isFalling) {
+            float baseY = marginY + (4.0f - p.z) * scaleZ;
+            float yOffset = (p.y) * (scaleZ * 0.1f);
+            screenY = baseY + yOffset;
+        }
+        else {
+            screenY = marginY + (4.0f - p.z) * scaleZ;
+        }
+
+        if (screenX < -20 || screenX > w + 20 || screenY < -20 || screenY > h + 20) continue;
 
         // 获取BMP密度
         float density = 0.8f;
@@ -204,15 +221,12 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
             }
         }
 
-        // 根据密度设置大小和颜色
-        float size = 3.0f + density * 6.0f;
+        float size = 2.5f + density * 5.0f;
 
-        // 颜色：密度高 = 白色/青色，密度低 = 蓝色
         int r = 80 + (int)(density * 175);
         int g = 120 + (int)(density * 135);
         int b = 200 + (int)(density * 55);
 
-        // 如果正在下落，根据Y位置调整透明度
         int alpha = 200;
         if (m_isFalling) {
             float heightFactor = (p.y + 3.5f) / 7.5f;
@@ -227,25 +241,23 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
 
     // 显示信息
     painter.setPen(Qt::white);
-    painter.setFont(QFont("Arial", 14));
-    painter.drawText(10, 30, "Water Curtain - BMP Shape Display");
-    painter.drawText(10, 55, QString("Particles: %1").arg(m_particles.size()));
+    painter.setFont(QFont("Arial", 11));
+    painter.drawText(10, 25, "Water Curtain - BMP Shape Display");
+    painter.drawText(10, 45, QString("Particles: %1").arg(m_particles.size()));
 
     if (!m_curtainImage.isNull()) {
-        painter.drawText(10, 80, QString("BMP: %1x%2").arg(m_curtainWidth).arg(m_curtainHeight));
+        painter.drawText(10, 65, QString("BMP: %1x%2").arg(m_curtainWidth).arg(m_curtainHeight));
     }
     else {
-        painter.drawText(10, 80, "No BMP - Showing heart shape");
-        painter.drawText(10, 105, "Place 'water_curtain.bmp' in program folder");
+        painter.drawText(10, 65, "No BMP - Showing heart shape");
     }
 
     if (m_isFalling) {
         painter.setPen(QColor(0, 255, 0));
-        painter.drawText(10, 130, "FALLING MODE - Particles moving down");
+        painter.drawText(10, 100, "FALLING MODE - Press SPACE to reset and fall again");
     }
     else {
         painter.setPen(QColor(255, 200, 0));
-        painter.drawText(10, 130, "STATIC MODE - Press SPACE to start falling");
-        painter.drawText(10, 155, "Shape remains clear while falling!");
+        painter.drawText(10, 100, "STATIC MODE - Press SPACE to start falling");
     }
 }
