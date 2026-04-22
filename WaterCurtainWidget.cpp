@@ -46,18 +46,22 @@ void WaterCurtainWidget::setParticleCount(int count)
     m_particleCount = count;
     initParticles();
 }
-
 void WaterCurtainWidget::startFalling()
 {
-    // 重置所有粒子到顶部，重新开始下落
-    for (int i = 0; i < m_particles.size(); ++i) {
-        m_particles[i].y = 4.0f;
-        m_particles[i].vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
+    if (m_isFalling) {
+        m_isFalling = false;
+        qDebug() << "Paused";
     }
-
-    m_isFalling = true;
-    m_lastTime = QElapsedTimer().nsecsElapsed() / 1e9f;
-    qDebug() << "Start falling! Particles reset to top";
+    else {
+        // 重置所有粒子到顶部，初速度5倍
+        for (int i = 0; i < m_particles.size(); ++i) {
+            m_particles[i].y = 4.0f;
+            m_particles[i].vy = -5.0f - QRandomGenerator::global()->generateDouble() * 7.5f;
+        }
+        m_isFalling = true;
+        m_lastTime = QElapsedTimer().nsecsElapsed() / 1e9f;
+        qDebug() << "Start falling!";
+    }
 }
 
 void WaterCurtainWidget::keyPressEvent(QKeyEvent* event)
@@ -123,7 +127,7 @@ void WaterCurtainWidget::initParticles()
     }
 
     m_particleCount = m_particles.size();
-    qDebug() << "Initialized" << m_particleCount << "particles - Press SPACE to start falling";
+    qDebug() << "Initialized" << m_particleCount << "particles - Press SPACE to start/stop";
 }
 
 void WaterCurtainWidget::updateParticles()
@@ -139,7 +143,7 @@ void WaterCurtainWidget::updateParticles()
     if (deltaTime > 0.033f) deltaTime = 0.033f;
     if (deltaTime < 0.001f) deltaTime = 0.016f;
 
-    float gravity = 8.0f;
+    float gravity = 40.0f;  // 从 8.0 改为 40.0，5倍速度
 
     for (int i = 0; i < m_particles.size(); ++i) {
         Particle& p = m_particles[i];
@@ -150,13 +154,13 @@ void WaterCurtainWidget::updateParticles()
         // 超出底部重置到顶部
         if (p.y < -3.5f) {
             p.y = 4.0f;
-            p.vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
+            p.vy = -5.0f - QRandomGenerator::global()->generateDouble() * 7.5f;  // 初速度5倍
         }
 
         // 超出顶部重置
         if (p.y > 5.0f) {
             p.y = 4.0f;
-            p.vy = -1.0f - QRandomGenerator::global()->generateDouble() * 1.5f;
+            p.vy = -5.0f - QRandomGenerator::global()->generateDouble() * 7.5f;
         }
     }
 
@@ -173,7 +177,6 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
     int w = width();
     int h = height();
 
-    // 增加边距，让显示更小
     float marginX = w * 0.2f;
     float marginY = h * 0.2f;
     float drawW = w - 2 * marginX;
@@ -181,17 +184,6 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
 
     float scaleX = drawW / 10.0f;
     float scaleZ = drawH / 8.0f;
-
-    // 网格线（可选，注释掉以保持清晰）
-    // painter.setPen(QColor(40, 40, 60));
-    // for (int i = -5; i <= 5; i++) {
-    //     float screenX = marginX + (i + 5) * scaleX;
-    //     painter.drawLine(screenX, marginY, screenX, marginY + drawH);
-    // }
-    // for (int i = -4; i <= 4; i++) {
-    //     float screenY = marginY + (4 - i) * scaleZ;
-    //     painter.drawLine(marginX, screenY, marginX + drawW, screenY);
-    // }
 
     // 绘制所有粒子
     for (const auto& p : m_particles) {
@@ -254,10 +246,10 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
 
     if (m_isFalling) {
         painter.setPen(QColor(0, 255, 0));
-        painter.drawText(10, 100, "FALLING MODE - Press SPACE to reset and fall again");
+        painter.drawText(10, 100, "FALLING - Press SPACE to pause");
     }
     else {
         painter.setPen(QColor(255, 200, 0));
-        painter.drawText(10, 100, "STATIC MODE - Press SPACE to start falling");
+        painter.drawText(10, 100, "PAUSED - Press SPACE to start falling");
     }
 }
