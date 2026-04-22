@@ -16,19 +16,21 @@ public:
 
     bool loadCurtainTexture(const QString& filepath);
     void setParticleCount(int count);
+    void startFalling();  // 开始下落
 
 protected:
     void paintEvent(QPaintEvent* event) override;
+    void keyPressEvent(QKeyEvent* event) override;  // 按空格开始下落
 
 private slots:
     void updateParticles();
 
 private:
     struct Particle {
-        float x, z;      // 固定位置（根据BMP决定）
+        float x, z;      // 固定位置
         float y;         // 当前Y坐标
         float vy;        // Y方向速度
-        float life;
+        bool active;
     };
 
     void initParticles();
@@ -38,6 +40,7 @@ private:
     QTimer m_updateTimer;
     int m_particleCount;
     float m_lastTime;
+    bool m_isFalling;    // 是否开始下落
 
     QImage m_curtainImage;
     int m_curtainWidth;
