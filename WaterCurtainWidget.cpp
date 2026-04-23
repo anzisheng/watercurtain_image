@@ -53,14 +53,15 @@ void WaterCurtainWidget::startFalling()
         qDebug() << "Paused";
     }
     else {
-        // 重置所有粒子到顶部，初速度5倍
+        // 重置所有粒子：活跃、位置到顶部、初速度
         for (int i = 0; i < m_particles.size(); ++i) {
+            m_particles[i].active = true;
             m_particles[i].y = 4.0f;
             m_particles[i].vy = -5.0f - QRandomGenerator::global()->generateDouble() * 7.5f;
         }
         m_isFalling = true;
         m_lastTime = QElapsedTimer().nsecsElapsed() / 1e9f;
-        qDebug() << "Start falling!";
+        qDebug() << "Start falling! All particles reset";
     }
 }
 
@@ -143,30 +144,24 @@ void WaterCurtainWidget::updateParticles()
     if (deltaTime > 0.033f) deltaTime = 0.033f;
     if (deltaTime < 0.001f) deltaTime = 0.016f;
 
-    float gravity = 40.0f;  // 从 8.0 改为 40.0，5倍速度
+    float gravity = 40.0f;
 
     for (int i = 0; i < m_particles.size(); ++i) {
         Particle& p = m_particles[i];
 
+        if (!p.active) continue;
+
         p.vy += gravity * deltaTime;
         p.y += p.vy * deltaTime;
 
-        // 超出底部重置到顶部
-        if (p.y < -3.5f) {
-            p.y = 4.0f;
-            p.vy = -5.0f - QRandomGenerator::global()->generateDouble() * 7.5f;  // 初速度5倍
-        }
-
-        // 超出顶部重置
-        if (p.y > 5.0f) {
-            p.y = 4.0f;
-            p.vy = -5.0f - QRandomGenerator::global()->generateDouble() * 7.5f;
+        // 超出底部则标记为不可见（消失）
+        if (p.y < -5.0f) {
+            p.active = false;
         }
     }
 
     update();
 }
-
 void WaterCurtainWidget::paintEvent(QPaintEvent* event)
 {
     QPainter painter(this);
@@ -185,8 +180,10 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
     float scaleX = drawW / 10.0f;
     float scaleZ = drawH / 8.0f;
 
-    // 绘制所有粒子
+    // 绘制所有活跃粒子
     for (const auto& p : m_particles) {
+        if (!p.active) continue;  // 只绘制活跃粒子
+
         float screenX = marginX + (p.x + 5.0f) * scaleX;
 
         float screenY;
@@ -231,25 +228,35 @@ void WaterCurtainWidget::paintEvent(QPaintEvent* event)
         painter.drawEllipse(QPointF(screenX, screenY), size, size);
     }
 
+    // 统计剩余活跃粒子数
+    int activeCount = 0;
+    for (const auto& p : m_particles) {
+        if (p.active) activeCount++;
+    }
+
     // 显示信息
     painter.setPen(Qt::white);
     painter.setFont(QFont("Arial", 11));
     painter.drawText(10, 25, "Water Curtain - BMP Shape Display");
-    painter.drawText(10, 45, QString("Particles: %1").arg(m_particles.size()));
+    painter.drawText(10, 45, QString("Total Particles: %1").arg(m_particles.size()));
+    painter.drawText(10, 65, QString("Active Particles: %1").arg(activeCount));
 
     if (!m_curtainImage.isNull()) {
-        painter.drawText(10, 65, QString("BMP: %1x%2").arg(m_curtainWidth).arg(m_curtainHeight));
+        painter.drawText(10, 85, QString("BMP: %1x%2").arg(m_curtainWidth).arg(m_curtainHeight));
     }
     else {
-        painter.drawText(10, 65, "No BMP - Showing heart shape");
+        painter.drawText(10, 85, "No BMP - Showing heart shape");
     }
 
     if (m_isFalling) {
         painter.setPen(QColor(0, 255, 0));
-        painter.drawText(10, 100, "FALLING - Press SPACE to pause");
+        painter.drawText(10, 120, "FALLING - Particles disappearing at bottom");
+        if (activeCount == 0) {
+            painter.drawText(10, 140, "All particles have fallen! Press SPACE to reset");
+        }
     }
     else {
         painter.setPen(QColor(255, 200, 0));
-        painter.drawText(10, 100, "PAUSED - Press SPACE to start falling");
+        painter.drawText(10, 120, "STATIC - Press SPACE to start falling");
     }
 }
